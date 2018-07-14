@@ -9,7 +9,7 @@
 #include <bytes.hpp>
 #include <offset.hpp>
 #include <segment.hpp>
-#include <srarea.hpp>
+#include <segregs.hpp>
 #include <fixup.hpp>
 #include <entry.hpp>
 #include <auto.hpp>
@@ -29,5 +29,12 @@
 
 #define CLASS_EXTERN  "XTRN"
 #define NAME_EXTERN   ".ref"
+
+/**
+ * From documentation on loader_t::accept_file(...)
+ * "This function may return a unique file format number instead of 1.
+ * To get this unique number, please contact the author."
+ */
+#define LDR_ID        0xD07
 
 #endif //#ifndef __IDA_LOADER_H__

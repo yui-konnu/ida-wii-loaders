@@ -47,23 +47,21 @@ int read_header(linput_t *fp, dolhdr *dhdr)
  *
  */
 
-int idaapi accept_file(linput_t *fp, char fileformatname[MAX_FILE_FORMAT_NAME], int n)
+int idaapi accept_file(qstring *fileformatname, qstring *processor, linput_t *li, const char *filename)
 {
   int i;
 
   dolhdr dhdr;
-  ulong filelen, valid = 0;
-
-  if(n) return(0);
+  int64 filelen, valid = 0;
 
   // first get the lenght of the file
   
-  filelen = qlsize(fp);
+  filelen = qlsize(li);
   // if to short for a DOL header then this is no DOL
   if (filelen < 0x100) return(0);
 
   // read DOL header from file
-  if (read_header(fp, &dhdr)==0) return(0);
+  if (read_header(li, &dhdr)==0) return(0);
   
   // now perform some sanitychecks
   for (i=0; i<7; i++) {
@@ -95,8 +93,10 @@ int idaapi accept_file(linput_t *fp, char fileformatname[MAX_FILE_FORMAT_NAME], 
   if (!valid) return(0);
 
   // file has passed all sanity checks and might be a DOL
-  qstrncpy(fileformatname, "Nintendo GameCube DOL", MAX_FILE_FORMAT_NAME);
-  return(ACCEPT_FIRST | 0xD07);
+  fileformatname->sprnt("Nintendo GameCube DOL");
+  processor->sprnt("PPC");
+
+  return(ACCEPT_FIRST | LDR_ID);
 }
 
 
@@ -121,7 +121,7 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
   
   // we need PowerPC support otherwise we cannot do much with DOLs
   if ( ph.id != PLFM_PPC )
-    set_processor_type("PPC", SETPROC_ALL|SETPROC_FATAL);
+    set_processor_type("PPC", setproc_level_t::SETPROC_LOADER);
 
   set_compiler_id(COMP_GNU);
 
@@ -129,23 +129,23 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
   if (read_header(fp, &dhdr)==0) qexit(1);
   
   // every journey has a beginning
-  inf.beginEA = inf.startIP = dhdr.entrypoint;
+  inf.start_ea = inf.start_ip = dhdr.entrypoint;
 
   // map selector 1 to 0
   set_selector(1, 0);
 
   // create all code segments
   for (i=0, snum=1; i<7; i++, snum++) {
-    char buf[50];
+    qstring buf;
     
     // 0 == no segment
     if (dhdr.addressText[i] == 0) continue;
     
     // create a name according to segmenttype and number
-    sprintf(buf, NAME_CODE "%u", snum);
+    buf.sprnt(NAME_CODE "%u", snum);
     
     // add the code segment
-    if (!add_segm(1, dhdr.addressText[i], dhdr.addressText[i]+dhdr.sizeText[i], buf, CLASS_CODE)) qexit(1);
+    if (!add_segm(1, dhdr.addressText[i], dhdr.addressText[i]+dhdr.sizeText[i], buf.c_str(), CLASS_CODE)) qexit(1);
     
     // set addressing to 32 bit
     set_segm_addressing(getseg(dhdr.addressText[i]), 1);
@@ -156,16 +156,16 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
 
   // create all data segments
   for (i=0, snum=1; i<11; i++, snum++) {
-    char buf[50];
+    qstring buf;
 
     // 0 == no segment
     if (dhdr.addressData[i] == 0) continue;
 
     // create a name according to segmenttype and number
-    sprintf(buf, NAME_DATA "%u", snum);
+    buf.sprnt(NAME_DATA "%u", snum);
 
     // add the data segment
-    if (!add_segm(1, dhdr.addressData[i], dhdr.addressData[i]+dhdr.sizeData[i], buf, CLASS_DATA)) qexit(1);
+    if (!add_segm(1, dhdr.addressData[i], dhdr.addressData[i]+dhdr.sizeData[i], buf.c_str(), CLASS_DATA)) qexit(1);
     
     // set addressing to 32 bit
     set_segm_addressing(getseg(dhdr.addressData[i]), 1);
@@ -175,7 +175,7 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
   }
 
   // is there a BSS defined?
-  if (dhdr.addressBSS != NULL) {
+  if (dhdr.addressBSS != 0) {
     // then add it
     if(!add_segm(1, dhdr.addressBSS, dhdr.addressBSS+dhdr.sizeBSS, NAME_BSS, CLASS_BSS)) qexit(1);
 
